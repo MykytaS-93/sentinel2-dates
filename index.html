@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel-2: даты съёмки по координатам</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #38bdf8;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --ok: #4ade80;
+    --err: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px 60px;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  p.lead {
+    color: var(--muted);
+    margin-top: 0;
+    font-size: 0.95rem;
+  }
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .row > div {
+    flex: 1;
+    min-width: 140px;
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: var(--text);
+    font-size: 1rem;
+  }
+  input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  button {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  button:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+  .status {
+    margin-top: 14px;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .status.error {
+    color: var(--err);
+  }
+  .result {
+    margin-top: 10px;
+  }
+  .predicted {
+    background: #0f2e24;
+    border: 1px solid var(--ok);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-top: 16px;
+  }
+  .predicted .big {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--ok);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #334155;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    background: #334155;
+    color: var(--text);
+  }
+  footer {
+    margin-top: 30px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  footer a {
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Sentinel-2: даты съёмки по координатам</h1>
+  <p class="lead">
+    Поиск по архиву Copernicus Data Space Ecosystem: показывает прошлые даты
+    съёмки для точки и прогнозирует ближайшую следующую по среднему интервалу повтора.
+  </p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="lat">Широта (lat)</label>
+        <input type="number" id="lat" step="any" placeholder="напр. 50.0" value="50.0">
+      </div>
+      <div>
+        <label for="lon">Долгота (lon)</label>
+        <input type="number" id="lon" step="any" placeholder="напр. 36.2" value="36.2">
+      </div>
+    </div>
+    <button id="runBtn">Рассчитать</button>
+    <div id="status" class="status"></div>
+    <div id="result" class="result"></div>
+  </div>
+
+  <footer>
+    Данные: <a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Data Space Ecosystem</a>.
+    Прогноз следующей даты — оценка по истории, не официальное расписание.
+  </footer>
+</div>
+
+<script>
+const btn = document.getElementById('runBtn');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+
+btn.addEventListener('click', run);
+
+async function run() {
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+
+  resultEl.innerHTML = '';
+  if (Number.isNaN(lat) || Number.isNaN(lon)) {
+    setStatus('Введите корректные широту и долготу.', true);
+    return;
+  }
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    setStatus('Координаты вне допустимого диапазона.', true);
+    return;
+  }
+
+  btn.disabled = true;
+  setStatus('Запрашиваю каталог Sentinel-2…');
+
+  try {
+    const products = await fetchSentinel2(lat, lon);
+    if (!products.length) {
+      setStatus('Снимков для этой точки не найдено.', true);
+      return;
+    }
+    setStatus(`Найдено снимков: ${products.length}. Показаны последние ${Math.min(products.length, 10)}.`);
+    renderResults(products);
+  } catch (err) {
+    console.error(err);
+    setStatus('Ошибка запроса: ' + err.message + '. Возможно, проблема с CORS или доступностью API — попробуйте позже.', true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function setStatus(text, isError) {
+  statusEl.textContent = text;
+  statusEl.className = 'status' + (isError ? ' error' : '');
+}
+
+async function fetchSentinel2(lat, lon) {
+  // Copernicus Data Space Ecosystem OData catalogue API.
+  // Public search endpoint, no auth required for metadata queries.
+  const point = `POINT(${lon} ${lat})`;
+  const filter = [
+    `Collection/Name eq 'SENTINEL-2'`,
+    `OData.CSC.Intersects(area=geography'SRID=4326;${point}')`
+  ].join(' and ');
+
+  const url = 'https://catalogue.dataspace.copernicus.eu/odata/v1/Products?' +
+    '$filter=' + encodeURIComponent(filter) +
+    '&$orderby=ContentDate/Start desc' +
+    '&$top=20';
+
+  const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  const items = (data.value || []).map(p => ({
+    name: p.Name,
+    start: p.ContentDate && p.ContentDate.Start,
+  })).filter(p => p.start);
+
+  // dedupe by date (multiple tiles can share the same acquisition time)
+  const seen = new Set();
+  const uniq = [];
+  for (const it of items) {
+    const key = it.start.slice(0, 16); // minute precision
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniq.push(it);
+    }
+  }
+  uniq.sort((a, b) => new Date(b.start) - new Date(a.start));
+  return uniq;
+}
+
+function renderResults(products) {
+  const dates = products.map(p => new Date(p.start));
+
+  // Estimate revisit interval from gaps between consecutive acquisitions.
+  const gapsDays = [];
+  for (let i = 0; i < dates.length - 1; i++) {
+    const diff = (dates[i] - dates[i + 1]) / (1000 * 60 * 60 * 24);
+    if (diff > 0.1) gapsDays.push(diff);
+  }
+  let predicted = null;
+  if (gapsDays.length) {
+    const sorted = [...gapsDays].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const last = dates[0];
+    predicted = new Date(last.getTime() + median * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    // advance until prediction is in the future
+    while (predicted < now) {
+      predicted = new Date(predicted.getTime() + median * 24 * 60 * 60 * 1000);
+    }
+    predicted._interval = median;
+  }
+
+  let html = '';
+  if (predicted) {
+    html += `
+      <div class="predicted">
+        <div>Ожидаемая следующая съёмка (оценка):</div>
+        <div class="big">${formatDate(predicted)}</div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-top:4px;">
+          медианный интервал по истории: ~${predicted._interval.toFixed(1)} дн.
+        </div>
+      </div>`;
+  }
+
+  html += '<table><thead><tr><th>Дата съёмки (UTC)</th><th>Продукт</th></tr></thead><tbody>';
+  for (const p of products.slice(0, 10)) {
+    html += `<tr><td>${formatDate(new Date(p.start))}</td><td><span class="badge">${shortName(p.name)}</span></td></tr>`;
+  }
+  html += '</tbody></table>';
+
+  resultEl.innerHTML = html;
+}
+
+function formatDate(d) {
+  return d.toLocaleString('ru-RU', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
+  }) + ' UTC';
+}
+
+function shortName(name) {
+  if (!name) return '';
+  return name.length > 28 ? name.slice(0, 25) + '…' : name;
+}
+</script>
+</body>
+</html>
