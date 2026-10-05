@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sentinel-2: расчёт даты съёмки по координатам</title>
+<title>Sentinel-2</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/5.0.0/satellite.min.js"></script>
 <style>
   :root {
@@ -25,16 +25,33 @@
     padding: 24px 16px 60px;
   }
   .wrap { max-width: 1040px; margin: 0 auto; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
   h1 { font-size: 1.4rem; margin-bottom: 4px; }
   p.lead { color: var(--muted); margin-top: 0; font-size: 0.95rem; }
 
-  .layout {
+  .lang-toggle {
+    flex: 0 0 auto;
     display: flex;
-    gap: 20px;
-    margin-top: 20px;
-    align-items: flex-start;
-    flex-wrap: wrap;
+    background: var(--card);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #334155;
   }
+  .lang-toggle button {
+    margin: 0;
+    width: auto;
+    padding: 8px 14px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .lang-toggle button.active { background: var(--accent); color: #0f172a; }
+
+  .layout { display: flex; gap: 20px; margin-top: 20px; align-items: flex-start; flex-wrap: wrap; }
   .sidebar {
     flex: 0 0 280px;
     background: var(--card);
@@ -61,7 +78,7 @@
   label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
   .row { display: flex; gap: 12px; flex-wrap: wrap; }
   .row > div { flex: 1; min-width: 140px; }
-  input[type="number"], select {
+  input[type="text"], select {
     width: 100%;
     padding: 10px 12px;
     border-radius: 8px;
@@ -71,7 +88,7 @@
     font-size: 1rem;
   }
   input:focus, select:focus { outline: none; border-color: var(--accent); }
-  button {
+  button.primary {
     margin-top: 16px;
     width: 100%;
     padding: 12px;
@@ -83,8 +100,8 @@
     font-size: 1rem;
     cursor: pointer;
   }
-  button:disabled { opacity: 0.6; cursor: default; }
-  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button.primary:disabled { opacity: 0.6; cursor: default; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
 
   .status { margin-top: 14px; font-size: 0.9rem; color: var(--muted); }
   .status.error { color: var(--err); }
@@ -98,12 +115,7 @@
     display: none;
   }
   .progress-bar.active { display: block; }
-  .progress-bar > div {
-    height: 100%;
-    width: 0%;
-    background: var(--accent);
-    transition: width 0.15s;
-  }
+  .progress-bar > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s; }
 
   .pass-item {
     display: flex;
@@ -133,29 +145,37 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Sentinel-2: расчёт даты съёмки по координатам</h1>
-  <p class="lead">Два источника точности: официальный план ESA (ближайшие дни) и орбитальный расчёт по TLE/SGP4 (на весь горизонт).</p>
+
+  <div class="topbar">
+    <div>
+      <h1 data-i18n="pageTitle"></h1>
+      <p class="lead" data-i18n="lead"></p>
+    </div>
+    <div class="lang-toggle">
+      <button id="langUA" onclick="setLang('uk')">UA</button>
+      <button id="langEN" onclick="setLang('en')">EN</button>
+    </div>
+  </div>
 
   <div class="layout">
 
     <div class="sidebar">
-      <h2>Как это считается</h2>
+      <h2 data-i18n="sidebarHeading"></h2>
 
       <div class="method plan">
-        <b>Ближайшие ~10–15 дней</b><br>
-        ESA публикует официальный план съёмки (KML) на 10–15 дней вперёд — это не прогноз, а реальное расписание. Автоматически скачать его из браузера нельзя (нет CORS, ссылки на файлы меняются каждую неделю), поэтому для подтверждения на этот период сверьтесь вручную:
-        <a href="https://sentinels.copernicus.eu/copernicus/sentinel-2/acquisition-plans" target="_blank" rel="noopener">страница плана ESA →</a><br><br>
-        В этом окне орбитальный расчёт ниже также наиболее точен, так как TLE свежие.
+        <b data-i18n="methodPlanTitle"></b><br>
+        <span data-i18n="methodPlanText"></span>
+        <a href="https://sentinels.copernicus.eu/copernicus/sentinel-2/acquisition-plans" target="_blank" rel="noopener" data-i18n="methodPlanLink"></a><br><br>
+        <span data-i18n="methodPlanNote"></span>
       </div>
 
       <div class="method orbit">
-        <b>Дальше — орбитальный расчёт</b><br>
-        Берутся актуальные орбитальные элементы (TLE) всех трёх спутников с CeleStrak и прогоняются через SGP4 — тот же алгоритм, что у профессиональных трекеров. Для каждого витка проверяется, попадает ли точка в полосу захвата (~290 км).<br><br>
-        Точность снижается со временем: TLE "стареют", и далее нескольких недель ошибка растёт и может накапливаться сильнее. Обновляйте страницу перед важным расчётом — TLE подтягиваются заново при каждом запуске.
+        <b data-i18n="methodOrbitTitle"></b><br>
+        <span data-i18n="methodOrbitText"></span>
       </div>
 
-      <h2>Важно</h2>
-      Геометрическое попадание в полосу означает, что спутник <i>мог</i> снять точку в этот момент — не 100% гарантия публикации снимка (бывают пропуски, приоритеты съёмки). Для суши Sentinel-2 снимает почти всегда.
+      <h2 data-i18n="importantHeading"></h2>
+      <span data-i18n="importantText"></span>
     </div>
 
     <div class="main">
@@ -163,36 +183,32 @@
       <div class="card">
         <div class="row">
           <div>
-            <label for="lat">Широта (lat)</label>
-            <input type="number" id="lat" step="any" value="50.0">
+            <label for="coords" data-i18n="coordsLabel"></label>
+            <input type="text" id="coords" value="50.00, 36.25">
           </div>
           <div>
-            <label for="lon">Долгота (lon)</label>
-            <input type="number" id="lon" step="any" value="36.2">
-          </div>
-          <div>
-            <label for="horizon">Горизонт расчёта</label>
+            <label for="horizon" data-i18n="horizonLabel"></label>
             <select id="horizon">
-              <option value="14">14 дней</option>
-              <option value="30" selected>30 дней</option>
-              <option value="60">60 дней</option>
-              <option value="90">90 дней</option>
+              <option value="14" data-i18n="h14"></option>
+              <option value="30" selected data-i18n="h30"></option>
+              <option value="60" data-i18n="h60"></option>
+              <option value="90" data-i18n="h90"></option>
             </select>
           </div>
         </div>
-        <button id="runBtn">Рассчитать пролёты</button>
+        <button class="primary" id="runBtn" data-i18n="calcButton"></button>
         <div id="status" class="status"></div>
         <div class="progress-bar" id="progressBar"><div id="progressFill"></div></div>
       </div>
 
       <div class="card" id="resultsCard" style="display:none;">
-        <h2 style="margin-top:0;font-size:1.05rem;">Ближайшие пролёты (орбитальный расчёт)</h2>
+        <h2 style="margin-top:0;font-size:1.05rem;" data-i18n="resultsHeading"></h2>
         <div id="passList"></div>
       </div>
 
       <div class="card">
         <details id="archiveDetails">
-          <summary>Показать фактические прошлые даты съёмки (архив Copernicus)</summary>
+          <summary data-i18n="archiveSummary"></summary>
           <div id="archiveStatus" class="status" style="margin-top:10px;"></div>
           <div id="archiveResult"></div>
         </details>
@@ -202,13 +218,125 @@
   </div>
 
   <footer>
-    Орбитальные данные: <a href="https://celestrak.org/" target="_blank" rel="noopener">CeleStrak</a> ·
-    Архив снимков: <a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Data Space Ecosystem</a> ·
-    Официальный план: <a href="https://sentinels.copernicus.eu/copernicus/sentinel-2/acquisition-plans" target="_blank" rel="noopener">ESA Acquisition Plans</a>
+    <span data-i18n="footerOrbit"></span> <a href="https://celestrak.org/" target="_blank" rel="noopener">CeleStrak</a> ·
+    <span data-i18n="footerArchive"></span> <a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Data Space Ecosystem</a> ·
+    <span data-i18n="footerPlan"></span> <a href="https://sentinels.copernicus.eu/copernicus/sentinel-2/acquisition-plans" target="_blank" rel="noopener">ESA Acquisition Plans</a>
   </footer>
 </div>
 
 <script>
+// ---------------------------------------------------------------------
+// i18n
+// ---------------------------------------------------------------------
+const STRINGS = {
+  uk: {
+    pageTitle: 'Sentinel-2: розрахунок дати зйомки за координатами',
+    lead: 'Два джерела точності: офіційний план ESA (найближчі дні) та орбітальний розрахунок за TLE/SGP4 (на весь горизонт).',
+    sidebarHeading: 'Як це рахується',
+    methodPlanTitle: 'Найближчі ~10–15 днів',
+    methodPlanText: 'ESA публікує офіційний план зйомки (KML) на 10–15 днів вперед — це не прогноз, а реальний розклад. Автоматично завантажити його з браузера не можна (немає CORS, посилання на файли змінюються щотижня), тому для перевірки на цей період звіртесь вручну: ',
+    methodPlanLink: 'сторінка плану ESA →',
+    methodPlanNote: 'У цьому вікні орбітальний розрахунок нижче також найточніший, бо TLE свіжі.',
+    methodOrbitTitle: 'Далі — орбітальний розрахунок',
+    methodOrbitText: 'Беруться актуальні орбітальні елементи (TLE) всіх трьох супутників з CeleStrak і прораховуються через SGP4 — той самий алгоритм, що й у професійних трекерів. Для кожного витка перевіряється, чи потрапляє точка у смугу захоплення (~290 км), і чи освітлена вона Сонцем (нічний виток не знімається). Точність знижується з часом: TLE "старіють", і за межами кількох тижнів похибка зростає.',
+    importantHeading: 'Важливо',
+    importantText: 'Геометричне потрапляння у смугу означає, що супутник міг зняти точку цієї миті — не 100% гарантія публікації знімка (бувають пропуски, пріоритети зйомки). Для суші Sentinel-2 знімає майже завжди.',
+    coordsLabel: 'Координати (десяткові градуси через кому, наприклад: 50.00, 36.25)',
+    horizonLabel: 'Горизонт розрахунку',
+    h14: '14 днів', h30: '30 днів', h60: '60 днів', h90: '90 днів',
+    calcButton: 'Розрахувати прольоти',
+    resultsHeading: 'Найближчі прольоти (орбітальний розрахунок)',
+    archiveSummary: 'Показати фактичні минулі дати зйомки (архів Copernicus)',
+    footerOrbit: 'Орбітальні дані:',
+    footerArchive: 'Архів знімків:',
+    footerPlan: 'Офіційний план:',
+    errCoords: 'Введіть координати у форматі "широта, довгота", наприклад 50.00, 36.25.',
+    loadingTLE: 'Завантажую актуальні TLE з CeleStrak…',
+    tleGot: (got, total) => `TLE отримано для ${got} з ${total} супутників. Рахую орбіти…`,
+    noTLE: 'Не вдалося отримати жодного набору TLE (можливо, CeleStrak недоступний).',
+    calcProgress: pct => `Рахую орбіти… ${pct}%`,
+    noPasses: 'Прольотів не знайдено у вказаному горизонті — спробуйте збільшити горизонт.',
+    done: (n, days) => `Готово. Знайдено прольотів: ${n} за ${days} дн.`,
+    errorPrefix: 'Помилка: ',
+    confHigh: 'збігається з вікном плану ESA',
+    confLow: 'лише орбітальний розрахунок',
+    passSubtitle: (sat, distKm) => `${sat} · найближча точка траси ~${distKm} км від цілі`,
+    archiveLoading: 'Запитую архів Copernicus…',
+    archiveNone: 'Знімків для цієї точки не знайдено.',
+    archiveFound: n => `Останні ${n} знімків з архіву:`,
+    archiveError: msg => 'Помилка запиту до архіву: ' + msg,
+    colDate: 'Дата (UTC)',
+    colProduct: 'Продукт',
+  },
+  en: {
+    pageTitle: 'Sentinel-2: calculate acquisition date by coordinates',
+    lead: 'Two sources of accuracy: the official ESA plan (near-term) and orbital calculation via TLE/SGP4 (full horizon).',
+    sidebarHeading: 'How this is calculated',
+    methodPlanTitle: 'Next ~10–15 days',
+    methodPlanText: 'ESA publishes an official acquisition plan (KML) 10–15 days ahead — this is a real schedule, not a prediction. It can\u2019t be fetched automatically in the browser (no CORS, file links change weekly), so for this window cross-check manually: ',
+    methodPlanLink: 'ESA plan page →',
+    methodPlanNote: 'In this window the orbital calculation below is also most accurate, since the TLE data is fresh.',
+    methodOrbitTitle: 'Beyond that — orbital calculation',
+    methodOrbitText: 'Current orbital elements (TLE) for all three satellites are fetched from CeleStrak and propagated with SGP4 — the same algorithm used by professional trackers. For each orbit it checks whether the point falls within the imaging swath (~290 km) and whether it\u2019s sunlit (the night-side pass isn\u2019t imaged). Accuracy decreases over time: TLEs "age", and beyond a few weeks the error grows.',
+    importantHeading: 'Note',
+    importantText: 'A geometric match within the swath means the satellite could have imaged the point at that time — not a 100% guarantee the scene was published (gaps and tasking priorities happen). Over land, Sentinel-2 images almost always.',
+    coordsLabel: 'Coordinates (decimal degrees, comma-separated, e.g.: 50.00, 36.25)',
+    horizonLabel: 'Calculation horizon',
+    h14: '14 days', h30: '30 days', h60: '60 days', h90: '90 days',
+    calcButton: 'Calculate passes',
+    resultsHeading: 'Upcoming passes (orbital calculation)',
+    archiveSummary: 'Show actual past acquisition dates (Copernicus archive)',
+    footerOrbit: 'Orbital data:',
+    footerArchive: 'Imagery archive:',
+    footerPlan: 'Official plan:',
+    errCoords: 'Enter coordinates as "latitude, longitude", e.g. 50.00, 36.25.',
+    loadingTLE: 'Fetching current TLE data from CeleStrak…',
+    tleGot: (got, total) => `TLE data received for ${got} of ${total} satellites. Calculating orbits…`,
+    noTLE: 'Could not fetch any TLE data (CeleStrak may be unavailable).',
+    calcProgress: pct => `Calculating orbits… ${pct}%`,
+    noPasses: 'No passes found in the given horizon — try a longer horizon.',
+    done: (n, days) => `Done. Found ${n} passes over ${days} days.`,
+    errorPrefix: 'Error: ',
+    confHigh: 'matches ESA plan window',
+    confLow: 'orbital calculation only',
+    passSubtitle: (sat, distKm) => `${sat} · closest ground-track point ~${distKm} km from target`,
+    archiveLoading: 'Querying the Copernicus archive…',
+    archiveNone: 'No scenes found for this point.',
+    archiveFound: n => `Latest ${n} scenes from the archive:`,
+    archiveError: msg => 'Archive request error: ' + msg,
+    colDate: 'Date (UTC)',
+    colProduct: 'Product',
+  }
+};
+
+let currentLang = 'uk';
+let lastPasses = null;
+let lastArchiveItems = null;
+
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  document.getElementById('langUA').classList.toggle('active', lang === 'uk');
+  document.getElementById('langEN').classList.toggle('active', lang === 'en');
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = STRINGS[lang][key];
+    if (typeof val === 'string') el.textContent = val;
+  });
+
+  if (lastPasses) renderPasses(lastPasses);
+  if (lastArchiveItems) renderArchive(lastArchiveItems);
+}
+
+function t(key, ...args) {
+  const val = STRINGS[currentLang][key];
+  return typeof val === 'function' ? val(...args) : val;
+}
+
+// ---------------------------------------------------------------------
+// Core logic
+// ---------------------------------------------------------------------
 const SATS = ['SENTINEL-2A', 'SENTINEL-2B', 'SENTINEL-2C'];
 const HALF_SWATH_KM = 150; // Sentinel-2 swath ~290 km
 const EARTH_RADIUS_KM = 6371;
@@ -229,6 +357,14 @@ document.getElementById('archiveDetails').addEventListener('toggle', function (e
   }
 });
 
+function parseCoords(raw) {
+  const parts = raw.split(',').map(s => parseFloat(s.trim()));
+  if (parts.length !== 2 || parts.some(Number.isNaN)) return null;
+  const [lat, lon] = parts;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
+}
+
 function setStatus(text, isError) {
   statusEl.textContent = text;
   statusEl.className = 'status' + (isError ? ' error' : '');
@@ -246,10 +382,10 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 async function fetchTLE(satName) {
   const url = `https://celestrak.org/NORAD/elements/gp.php?NAME=${encodeURIComponent(satName)}&FORMAT=TLE`;
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`CeleStrak HTTP ${resp.status} для ${satName}`);
+  if (!resp.ok) throw new Error(`CeleStrak HTTP ${resp.status} (${satName})`);
   const text = (await resp.text()).trim();
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  if (lines.length < 3) throw new Error(`Нет TLE для ${satName}`);
+  if (lines.length < 3) throw new Error(`No TLE for ${satName}`);
   return { name: satName, line1: lines[1], line2: lines[2] };
 }
 
@@ -257,22 +393,45 @@ function sleep0() {
   return new Promise(r => requestAnimationFrame(r));
 }
 
+// Simplified solar position (NOAA-style algorithm) — used only to tell
+// day-side from night-side passes, not for precision solar work.
+function sunElevationDeg(date, latDeg, lonDeg) {
+  const rad = Math.PI / 180;
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const d = jd - 2451545.0;
+  const g = ((357.529 + 0.98560028 * d) % 360) * rad;
+  const q = (280.459 + 0.98564736 * d) % 360;
+  const L = ((q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) % 360) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const RA = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / rad;
+  const decl = Math.asin(Math.sin(e) * Math.sin(L)) / rad;
+  const gmst = (280.46061837 + 360.98564736629 * d) % 360;
+  let ha = (gmst + lonDeg - RA) % 360;
+  if (ha < -180) ha += 360;
+  if (ha > 180) ha -= 360;
+  return Math.asin(
+    Math.sin(latDeg * rad) * Math.sin(decl * rad) +
+    Math.cos(latDeg * rad) * Math.cos(decl * rad) * Math.cos(ha * rad)
+  ) / rad;
+}
+
 async function runOrbitCalc() {
-  const lat = parseFloat(document.getElementById('lat').value);
-  const lon = parseFloat(document.getElementById('lon').value);
+  const coords = parseCoords(document.getElementById('coords').value);
   const horizonDays = parseInt(document.getElementById('horizon').value, 10);
 
-  if (Number.isNaN(lat) || Number.isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    setStatus('Введите корректные координаты.', true);
+  if (!coords) {
+    setStatus(t('errCoords'), true);
     return;
   }
+  const { lat, lon } = coords;
 
   runBtn.disabled = true;
   resultsCard.style.display = 'none';
   passList.innerHTML = '';
+  lastPasses = null;
   progressBar.classList.add('active');
   progressFill.style.width = '0%';
-  setStatus('Загружаю актуальные TLE со CeleStrak…');
+  setStatus(t('loadingTLE'));
 
   try {
     const tleResults = await Promise.allSettled(SATS.map(fetchTLE));
@@ -283,11 +442,9 @@ async function runOrbitCalc() {
         satrecs.push({ name: r.value.name, satrec });
       }
     }
-    if (!satrecs.length) {
-      throw new Error('Не удалось получить ни одного набора TLE (возможно, CeleStrak недоступен).');
-    }
+    if (!satrecs.length) throw new Error(t('noTLE'));
 
-    setStatus(`TLE получены для ${satrecs.length} из ${SATS.length} спутников. Считаю орбиты…`);
+    setStatus(t('tleGot', satrecs.length, SATS.length));
 
     const stepSeconds = 20;
     const now = new Date();
@@ -303,18 +460,19 @@ async function runOrbitCalc() {
       let passMin = Infinity;
       let passTime = null;
 
-      for (let t = new Date(now); t <= endTime; t = new Date(t.getTime() + stepSeconds * 1000)) {
-        const pv = satellite.propagate(satrec, t);
+      for (let tt = new Date(now); tt <= endTime; tt = new Date(tt.getTime() + stepSeconds * 1000)) {
+        const pv = satellite.propagate(satrec, tt);
         if (!pv.position) { processed++; continue; }
-        const gmst = satellite.gstime(t);
+        const gmst = satellite.gstime(tt);
         const geo = satellite.eciToGeodetic(pv.position, gmst);
         const satLat = satellite.degreesLat(geo.latitude);
         const satLon = satellite.degreesLong(geo.longitude);
         const dist = haversineKm(lat, lon, satLat, satLon);
+        const daylight = sunElevationDeg(tt, lat, lon) > 0;
 
-        if (dist < HALF_SWATH_KM) {
+        if (dist < HALF_SWATH_KM && daylight) {
           inPass = true;
-          if (dist < passMin) { passMin = dist; passTime = new Date(t); }
+          if (dist < passMin) { passMin = dist; passTime = new Date(tt); }
         } else if (inPass) {
           allPasses.push({ sat: name, time: passTime, distKm: passMin });
           inPass = false; passMin = Infinity; passTime = null;
@@ -324,7 +482,7 @@ async function runOrbitCalc() {
         if (processed % chunkSize === 0) {
           const pct = Math.min(100, Math.round((processed / (totalSteps * satrecs.length)) * 100));
           progressFill.style.width = pct + '%';
-          setStatus(`Считаю орбиты… ${pct}%`);
+          setStatus(t('calcProgress', pct));
           await sleep0();
         }
       }
@@ -335,17 +493,18 @@ async function runOrbitCalc() {
     allPasses.sort((a, b) => a.time - b.time);
 
     if (!allPasses.length) {
-      setStatus('Пролётов не найдено в указанном горизонте — попробуйте увеличить горизонт.', true);
+      setStatus(t('noPasses'), true);
       return;
     }
 
-    renderPasses(allPasses.slice(0, 20));
-    setStatus(`Готово. Найдено пролётов: ${allPasses.length} за ${horizonDays} дн.`);
+    lastPasses = allPasses.slice(0, 20);
+    renderPasses(lastPasses);
+    setStatus(t('done', allPasses.length, horizonDays));
     resultsCard.style.display = 'block';
 
   } catch (err) {
     console.error(err);
-    setStatus('Ошибка: ' + err.message, true);
+    setStatus(t('errorPrefix') + err.message, true);
   } finally {
     runBtn.disabled = false;
     progressBar.classList.remove('active');
@@ -359,12 +518,12 @@ function renderPasses(passes) {
   passList.innerHTML = passes.map(p => {
     const isHigh = p.time <= highConfCutoff;
     const confClass = isHigh ? 'high' : 'low';
-    const confText = isHigh ? 'совпадает с окном плана ESA' : 'только орбитальный расчёт';
+    const confText = isHigh ? t('confHigh') : t('confLow');
     return `
       <div class="pass-item">
         <div>
           <div class="date">${formatDate(p.time)}</div>
-          <div style="color:var(--muted);font-size:0.8rem;">${p.sat} · ближайшая точка трассы ~${p.distKm.toFixed(0)} км от цели</div>
+          <div style="color:var(--muted);font-size:0.8rem;">${t('passSubtitle', p.sat, p.distKm.toFixed(0))}</div>
         </div>
         <span class="conf ${confClass}">${confText}</span>
       </div>`;
@@ -372,7 +531,7 @@ function renderPasses(passes) {
 }
 
 function formatDate(d) {
-  return d.toLocaleString('ru-RU', {
+  return d.toLocaleString(currentLang === 'uk' ? 'uk-UA' : 'en-GB', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', timeZone: 'UTC'
   }) + ' UTC';
@@ -381,12 +540,18 @@ function formatDate(d) {
 // ---- Archive (actual past acquisitions from Copernicus catalog) ----
 
 async function loadArchive() {
-  const lat = parseFloat(document.getElementById('lat').value);
-  const lon = parseFloat(document.getElementById('lon').value);
+  const coords = parseCoords(document.getElementById('coords').value);
   const archiveStatus = document.getElementById('archiveStatus');
   const archiveResult = document.getElementById('archiveResult');
 
-  archiveStatus.textContent = 'Запрашиваю архив Copernicus…';
+  if (!coords) {
+    archiveStatus.textContent = t('errCoords');
+    archiveStatus.className = 'status error';
+    return;
+  }
+  const { lat, lon } = coords;
+
+  archiveStatus.textContent = t('archiveLoading');
   archiveStatus.className = 'status';
   archiveResult.innerHTML = '';
 
@@ -416,26 +581,37 @@ async function loadArchive() {
     uniq.sort((a, b) => new Date(b.start) - new Date(a.start));
 
     if (!uniq.length) {
-      archiveStatus.textContent = 'Снимков для этой точки не найдено.';
+      archiveStatus.textContent = t('archiveNone');
+      lastArchiveItems = [];
       return;
     }
 
-    archiveStatus.textContent = `Последние ${Math.min(uniq.length, 10)} снимков из архива:`;
-    archiveResult.innerHTML = '<table><thead><tr><th>Дата (UTC)</th><th>Продукт</th></tr></thead><tbody>' +
-      uniq.slice(0, 10).map(p => `<tr><td>${formatDate(new Date(p.start))}</td><td><span class="badge">${shortName(p.name)}</span></td></tr>`).join('') +
-      '</tbody></table>';
+    lastArchiveItems = uniq.slice(0, 10);
+    archiveStatus.textContent = t('archiveFound', lastArchiveItems.length);
+    renderArchive(lastArchiveItems);
 
   } catch (err) {
     console.error(err);
-    archiveStatus.textContent = 'Ошибка запроса к архиву: ' + err.message;
+    archiveStatus.textContent = t('archiveError', err.message);
     archiveStatus.className = 'status error';
   }
+}
+
+function renderArchive(items) {
+  const archiveResult = document.getElementById('archiveResult');
+  if (!items.length) { archiveResult.innerHTML = ''; return; }
+  archiveResult.innerHTML = `<table><thead><tr><th>${t('colDate')}</th><th>${t('colProduct')}</th></tr></thead><tbody>` +
+    items.map(p => `<tr><td>${formatDate(new Date(p.start))}</td><td><span class="badge">${shortName(p.name)}</span></td></tr>`).join('') +
+    '</tbody></table>';
 }
 
 function shortName(name) {
   if (!name) return '';
   return name.length > 28 ? name.slice(0, 25) + '…' : name;
 }
+
+// ---------------------------------------------------------------------
+setLang('uk');
 </script>
 </body>
 </html>
